@@ -1,6 +1,5 @@
-
-import React from "react";
-import { Link, useNavigate } from "react-router-dom";
+import React, { useState } from "react";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -26,8 +25,10 @@ const loginSchema = z.object({
 type LoginValues = z.infer<typeof loginSchema>;
 
 const Login = () => {
-  const { login } = useAuth();
+  const { loginWithCredentials } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [isLoading, setIsLoading] = useState(false);
 
   const form = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
@@ -38,23 +39,35 @@ const Login = () => {
   });
 
   const onSubmit = async (data: LoginValues) => {
+    setIsLoading(true);
     try {
-      // In a real app, you would send this data to your API
-      // For this frontend-only demo, we'll create a fake JWT token
-      const fakeToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxMjM0NTYiLCJuYW1lIjoiSm9obiBEb2UiLCJlbWFpbCI6ImpvaG5AZXhhbXBsZS5jb20iLCJleHAiOjE5MTY5MzkyNzN9.qeAR5Xq-2IVk4TCL_DHlOJTfvQ_HSUraFWIPNwA6rkU";
+      await loginWithCredentials(data.email, data.password);
       
-      login(fakeToken);
       toast({
         title: "Login successful",
         description: "Welcome back to TrackWise!",
       });
-      navigate("/dashboard");
+      
+      // Check for saved paths in multiple storage locations
+      const redirectPath = 
+        sessionStorage.getItem('redirectAfterLogin') || 
+        localStorage.getItem('currentPath') ||
+        (location.state?.from?.pathname) || 
+        '/dashboard';
+      
+      // Clear the stored redirect path
+      sessionStorage.removeItem('redirectAfterLogin');
+      
+      // Navigate to the redirect path or dashboard
+      navigate(redirectPath);
     } catch (error) {
       toast({
         title: "Login failed",
-        description: "Please check your credentials and try again.",
+        description: error instanceof Error ? error.message : "Please check your credentials and try again.",
         variant: "destructive",
       });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -99,8 +112,8 @@ const Login = () => {
               </FormItem>
             )}
           />
-          <Button type="submit" className="w-full">
-            Login
+          <Button type="submit" className="w-full" disabled={isLoading}>
+            {isLoading ? "Logging in..." : "Login"}
           </Button>
         </form>
       </Form>

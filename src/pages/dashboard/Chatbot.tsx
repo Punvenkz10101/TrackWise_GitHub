@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,19 +14,8 @@ interface Message {
   timestamp: Date;
 }
 
-// Sample AI responses
-const sampleResponses = [
-  "Based on your study pattern, I recommend focusing on chapter 5 today.",
-  "The quadratic formula is x = (-b ± √(b² - 4ac)) / 2a. It's used to solve quadratic equations in the form ax² + bx + c = 0.",
-  "For effective memorization, try spaced repetition. Review the material after 1 day, then 3 days, then 7 days.",
-  "I suggest breaking down this assignment into smaller tasks. Start with the research phase, then outline, draft, and finally revise.",
-  "The law of conservation of energy states that energy can neither be created nor destroyed, only transformed from one form to another.",
-  "To improve your focus during study sessions, try the Pomodoro technique: 25 minutes of focused work followed by a 5-minute break.",
-  "When writing an essay, make sure your thesis statement is clear and that each paragraph supports it with evidence.",
-  "In mathematics, a function is a relation between sets where each input has exactly one output.",
-  "To prepare for your exam, create a study schedule, review your notes regularly, practice with past papers, and get enough sleep the night before.",
-  "The three branches of government in the United States are the executive, legislative, and judicial branches.",
-];
+// Empty sample responses
+const sampleResponses = [];
 
 const ChatbotPage = () => {
   const [messages, setMessages] = useState<Message[]>([

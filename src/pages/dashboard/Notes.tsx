@@ -1,5 +1,4 @@
-
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect, useMemo, forwardRef, useCallback, RefObject } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,48 +7,82 @@ import { toast } from "@/components/ui/use-toast";
 import ReactQuill from "react-quill";
 import "react-quill/dist/quill.snow.css";
 import { Folder, Plus, Save, Search, Trash2 } from "lucide-react";
+import { notesAPI } from "@/lib/api";
 
 interface Note {
-  id: string;
+  _id: string; // Changed from id to _id to match MongoDB
   title: string;
   content: string;
   createdAt: Date;
   updatedAt: Date;
 }
 
-// Mock initial notes
-const initialNotes: Note[] = [
-  {
-    id: "1",
-    title: "Physics Lecture Notes",
-    content: "<h2>Introduction to Mechanics</h2><p>Newton's three laws of motion form the foundation of classical mechanics:</p><ol><li>An object at rest stays at rest, and an object in motion stays in motion unless acted upon by a force.</li><li>Force equals mass times acceleration (F = ma).</li><li>For every action, there is an equal and opposite reaction.</li></ol>",
-    createdAt: new Date("2023-04-10"),
-    updatedAt: new Date("2023-04-12"),
-  },
-  {
-    id: "2",
-    title: "Chemistry Study Guide",
-    content: "<h2>Periodic Table Elements</h2><p>Key groups to remember:</p><ul><li>Alkali Metals (Group 1)</li><li>Alkaline Earth Metals (Group 2)</li><li>Halogens (Group 17)</li><li>Noble Gases (Group 18)</li></ul><p>Transition metals occupy the central block of the periodic table.</p>",
-    createdAt: new Date("2023-04-05"),
-    updatedAt: new Date("2023-04-07"),
-  },
-  {
-    id: "3",
-    title: "Literature Analysis",
-    content: "<h2>Theme Analysis: Symbolism in Literature</h2><p>Symbolism is a literary device where objects, characters, or actions represent abstract ideas or concepts.</p><p>Common symbols include:</p><ul><li>Light/Darkness - Knowledge/Ignorance</li><li>Water - Rebirth/Purification</li><li>Colors - Various emotions and concepts</li></ul>",
-    createdAt: new Date("2023-04-01"),
-    updatedAt: new Date("2023-04-03"),
-  },
-];
+// Better typed wrapper for ReactQuill to handle refs properly
+interface QuillEditorProps {
+  theme?: string;
+  value: string;
+  onChange: (value: string) => void;
+  modules?: unknown;
+  formats?: string[];
+  className?: string;
+}
+
+// Create a properly typed forwardRef wrapper for ReactQuill
+const QuillEditor = forwardRef<ReactQuill, QuillEditorProps>((props, ref) => {
+  return <ReactQuill {...props} ref={ref} />;
+});
+
+QuillEditor.displayName = 'QuillEditor';
 
 const NotesPage = () => {
-  const [notes, setNotes] = useState<Note[]>(initialNotes);
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [newNoteTitle, setNewNoteTitle] = useState("");
   const [isCreatingNote, setIsCreatingNote] = useState(false);
   const [editorContent, setEditorContent] = useState("");
   const quillRef = useRef<ReactQuill>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Fetch notes on component mount
+  useEffect(() => {
+    async function fetchNotes() {
+      try {
+        setLoading(true);
+        const response = await notesAPI.getAllNotes();
+        // Convert string dates to Date objects
+        const formattedNotes = response.map((note: Note) => ({
+          ...note,
+          createdAt: new Date(note.createdAt),
+          updatedAt: new Date(note.updatedAt)
+        }));
+        setNotes(formattedNotes);
+      } catch (error) {
+        console.error("Error fetching notes:", error);
+        
+        // Show different message for auth errors
+        if (error instanceof Error && error.message === 'Authentication failed') {
+          toast({
+            title: "Authentication Error",
+            description: "Your session may have expired. Please refresh the page or log in again.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Error",
+            description: "Failed to load notes",
+            variant: "destructive",
+          });
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchNotes();
+  }, []);
 
   // Filter notes based on search term
   const filteredNotes = notes.filter(
@@ -57,16 +90,23 @@ const NotesPage = () => {
   );
 
   const handleNoteSelect = (note: Note) => {
+    // If there's a pending auto-save, clear it
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = null;
+    }
+    
     // Save current note first if there's one selected
     if (selectedNote && editorContent !== selectedNote.content) {
-      handleSaveNote();
+      // Use the extracted save function
+      saveNote(selectedNote, editorContent);
     }
     
     setSelectedNote(note);
     setEditorContent(note.content);
   };
 
-  const handleCreateNewNote = () => {
+  const handleCreateNewNote = async () => {
     if (!newNoteTitle.trim()) {
       toast({
         title: "Error",
@@ -76,69 +116,207 @@ const NotesPage = () => {
       return;
     }
 
-    const newNote: Note = {
-      id: Date.now().toString(),
-      title: newNoteTitle,
-      content: "",
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
+    try {
+      console.log('Creating new note with title:', newNoteTitle);
+      const response = await notesAPI.createNote({
+        title: newNoteTitle,
+        content: ""
+      });
 
-    setNotes([...notes, newNote]);
-    setSelectedNote(newNote);
-    setEditorContent("");
-    setNewNoteTitle("");
-    setIsCreatingNote(false);
+      const newNote = {
+        ...response,
+        createdAt: new Date(response.createdAt),
+        updatedAt: new Date(response.updatedAt)
+      };
 
-    toast({
-      title: "Note created",
-      description: "Your new note has been created.",
-    });
+      setNotes([...notes, newNote]);
+      setSelectedNote(newNote);
+      setEditorContent("");
+      setNewNoteTitle("");
+      setIsCreatingNote(false);
+
+      toast({
+        title: "Note created",
+        description: "Your new note has been created.",
+      });
+    } catch (error) {
+      console.error("Error creating note:", error);
+      
+      // Display more informative error message
+      let errorMessage = "Failed to create note";
+      let errorTitle = "Error";
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+        
+        // Handle specific error cases
+        if (errorMessage.includes('user ID format')) {
+          errorTitle = "Authentication Error";
+          errorMessage = "Your session may have expired. Please refresh the page.";
+        } else if (errorMessage.includes('content')) {
+          // Handle content validation errors
+          errorTitle = "Content Error";
+          errorMessage = "There was an issue with the note content. Please try again.";
+        }
+      }
+      
+      toast({
+        title: errorTitle,
+        description: errorMessage,
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleDeleteNote = (noteId: string) => {
-    setNotes(notes.filter(note => note.id !== noteId));
+  const handleDeleteNote = async (noteId: string) => {
+    try {
+      console.log('Deleting note with ID:', noteId);
+      await notesAPI.deleteNote(noteId);
+      
+      setNotes(notes.filter(note => note._id !== noteId));
+      
+      if (selectedNote && selectedNote._id === noteId) {
+        setSelectedNote(null);
+        setEditorContent("");
+      }
+
+      toast({
+        title: "Note deleted",
+        description: "Your note has been deleted.",
+      });
+    } catch (error) {
+      console.error("Error deleting note:", error);
+      
+      // Display more informative error message
+      let errorMessage = "Failed to delete note";
+      let errorTitle = "Error";
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+        
+        // Handle specific error types
+        if (errorMessage.includes('Invalid note ID format')) {
+          errorTitle = "Invalid Note ID";
+          errorMessage = "The note ID format is invalid.";
+        } else if (errorMessage.includes('Note not found')) {
+          errorTitle = "Note Not Found";
+          errorMessage = "The note may have been already deleted.";
+          
+          // Remove from state if not found on server
+          setNotes(notes.filter(note => note._id !== noteId));
+          
+          if (selectedNote && selectedNote._id === noteId) {
+            setSelectedNote(null);
+            setEditorContent("");
+          }
+        }
+      }
+      
+      toast({
+        title: errorTitle,
+        description: errorMessage,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleSaveNote = async () => {
+    if (!selectedNote) return;
     
-    if (selectedNote && selectedNote.id === noteId) {
-      setSelectedNote(null);
-      setEditorContent("");
+    // Clear any pending auto-save timeout
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = null;
+    }
+    
+    // Use the extracted saveNote function
+    await saveNote(selectedNote, editorContent);
+  };
+
+  // Debounced auto-save function
+  const debounceSave = useCallback((note: Note, content: string) => {
+    // Clear any existing timeout
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
     }
 
-    toast({
-      title: "Note deleted",
-      description: "Your note has been deleted.",
-    });
-  };
+    // Set a new timeout to save after 1500ms of inactivity
+    saveTimeoutRef.current = setTimeout(() => {
+      saveNote(note, content);
+    }, 1500);
+  }, []);
 
-  const handleSaveNote = () => {
-    if (!selectedNote) return;
+  // Extracted save note logic for reuse
+  const saveNote = async (note: Note, content: string) => {
+    if (!note) return;
+    
+    setIsSaving(true);
+    try {
+      console.log('Auto-saving note with ID:', note._id);
+      const noteData = {
+        title: note.title,
+        content: content
+      };
 
-    const updatedNotes = notes.map(note => {
-      if (note.id === selectedNote.id) {
-        return {
-          ...note,
-          content: editorContent,
-          updatedAt: new Date(),
+      const updatedNote = await notesAPI.updateNote(note._id, noteData);
+
+      if (updatedNote) {
+        const formattedNote = {
+          ...updatedNote,
+          createdAt: new Date(updatedNote.createdAt),
+          updatedAt: new Date(updatedNote.updatedAt)
         };
+
+        // Update the notes array with the updated note
+        setNotes(prevNotes => prevNotes.map(existingNote => 
+          existingNote._id === note._id ? formattedNote : existingNote
+        ));
+        
+        // Update selected note if it's the currently edited one
+        if (selectedNote && selectedNote._id === note._id) {
+          setSelectedNote(formattedNote);
+        }
+
+        toast({
+          title: "Note saved",
+          description: "Your changes have been saved.",
+          variant: "default"
+        });
       }
-      return note;
-    });
-
-    setNotes(updatedNotes);
-    setSelectedNote({
-      ...selectedNote,
-      content: editorContent,
-      updatedAt: new Date(),
-    });
-
-    toast({
-      title: "Note saved",
-      description: "Your note has been saved successfully.",
-    });
+    } catch (error) {
+      console.error("Error auto-saving note:", error);
+      
+      toast({
+        title: "Save Error",
+        description: error instanceof Error ? error.message : "Failed to save note",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
+
+  // Handle editor content change with auto-save
+  const handleEditorChange = (content: string) => {
+    setEditorContent(content);
+    
+    // Auto-save if we have a selected note
+    if (selectedNote) {
+      debounceSave(selectedNote, content);
+    }
+  };
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Configure Quill editor modules and formats
-  const modules = {
+  const modules = useMemo(() => ({
     toolbar: [
       [{ header: [1, 2, 3, false] }],
       ['bold', 'italic', 'underline', 'strike'],
@@ -148,15 +326,15 @@ const NotesPage = () => {
       ['link', 'image'],
       ['clean'],
     ],
-  };
+  }), []);
 
-  const formats = [
+  const formats = useMemo(() => [
     'header',
     'bold', 'italic', 'underline', 'strike',
     'list', 'bullet',
     'blockquote', 'code-block',
     'link', 'image', 'color', 'background',
-  ];
+  ], []);
 
   return (
     <DashboardLayout>
@@ -216,13 +394,17 @@ const NotesPage = () => {
                 </div>
               )}
               
-              {filteredNotes.length > 0 ? (
+              {loading ? (
+                <div className="flex justify-center p-4">
+                  Loading notes...
+                </div>
+              ) : filteredNotes.length > 0 ? (
                 <div className="space-y-2">
                   {filteredNotes.map((note) => (
                     <div
-                      key={note.id}
+                      key={note._id}
                       className={`p-3 rounded-md cursor-pointer flex justify-between items-start transition-colors ${
-                        selectedNote?.id === note.id
+                        selectedNote?._id === note._id
                           ? "bg-primary text-primary-foreground"
                           : "hover:bg-muted"
                       }`}
@@ -241,13 +423,13 @@ const NotesPage = () => {
                         variant="ghost"
                         size="icon"
                         className={`ml-2 ${
-                          selectedNote?.id === note.id
+                          selectedNote?._id === note._id
                             ? "hover:bg-primary-foreground/20 text-primary-foreground"
                             : "hover:bg-muted-foreground/20"
                         }`}
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleDeleteNote(note.id);
+                          handleDeleteNote(note._id);
                         }}
                       >
                         <Trash2 className="h-4 w-4" />
@@ -282,11 +464,11 @@ const NotesPage = () => {
             <CardContent className="h-[calc(100vh-300px)] overflow-auto">
               {selectedNote ? (
                 <div className="h-full">
-                  <ReactQuill
+                  <QuillEditor
                     ref={quillRef}
                     theme="snow"
                     value={editorContent}
-                    onChange={setEditorContent}
+                    onChange={handleEditorChange}
                     modules={modules}
                     formats={formats}
                     className="h-[calc(100%-50px)]"
@@ -304,8 +486,9 @@ const NotesPage = () => {
               <CardFooter className="flex justify-between">
                 <div className="text-xs text-muted-foreground">
                   Created: {selectedNote.createdAt.toLocaleDateString()}
+                  {isSaving && <span className="ml-2 text-muted-foreground">(Saving...)</span>}
                 </div>
-                <Button onClick={handleSaveNote}>
+                <Button onClick={handleSaveNote} disabled={isSaving}>
                   <Save className="mr-2 h-4 w-4" />
                   Save Note
                 </Button>

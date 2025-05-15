@@ -1,5 +1,4 @@
-
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,50 +9,153 @@ import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/use-toast";
 import { Bell, Calendar as CalendarIcon, Plus } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { scheduleAPI } from "@/lib/api";
 
-// Mock reminders for demo
-const initialReminders = [
-  { id: "1", date: new Date("2025-04-20"), title: "Project submission", description: "Submit final project" },
-  { id: "2", date: new Date("2025-04-25"), title: "Study session", description: "Review chapter 7-9" },
-];
+interface Reminder {
+  _id: string;
+  title: string;
+  description?: string;
+  date: Date;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
 
 const SchedulePage = () => {
   const [date, setDate] = useState<Date | undefined>(new Date());
-  const [reminders, setReminders] = useState(initialReminders);
+  const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [loading, setLoading] = useState(true);
   const [newReminder, setNewReminder] = useState({ title: "", description: "" });
   const [dialogOpen, setDialogOpen] = useState(false);
+  
+  // Fetch reminders on component mount
+  useEffect(() => {
+    const fetchReminders = async () => {
+      try {
+        setLoading(true);
+        const response = await scheduleAPI.getAllReminders();
+        
+        // Convert string dates to Date objects
+        const formattedReminders = response.map((reminder: Reminder) => ({
+          ...reminder,
+          date: new Date(reminder.date),
+          createdAt: reminder.createdAt ? new Date(reminder.createdAt) : undefined,
+          updatedAt: reminder.updatedAt ? new Date(reminder.updatedAt) : undefined
+        }));
+        
+        setReminders(formattedReminders);
+      } catch (error) {
+        console.error("Error fetching reminders:", error);
+        
+        let errorTitle = "Error";
+        let errorMessage = "Failed to load schedule data";
+        
+        // Show different message for specific error types
+        if (error instanceof Error) {
+          if (error.message.includes('Authentication')) {
+            errorTitle = "Authentication Error";
+            errorMessage = "Your session may have expired. Please refresh the page or log in again.";
+          } else if (error.message.includes('connect to server')) {
+            errorTitle = "Connection Error";
+            errorMessage = "Could not connect to the server. Please check that the server is running.";
+          } else if (error.message.includes('timed out')) {
+            errorTitle = "Timeout Error";
+            errorMessage = "The request timed out. Please try again later.";
+          }
+        }
+        
+        toast({
+          title: errorTitle,
+          description: errorMessage,
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchReminders();
+  }, []);
   
   // Get reminders for selected date
   const selectedDateReminders = reminders.filter(
     (reminder) => date && reminder.date.toDateString() === date.toDateString()
   );
 
-  const handleAddReminder = () => {
+  const handleAddReminder = async () => {
     if (!date || !newReminder.title) return;
     
-    const reminder = {
-      id: Date.now().toString(),
-      date: new Date(date),
-      title: newReminder.title,
-      description: newReminder.description,
-    };
-    
-    setReminders([...reminders, reminder]);
-    setNewReminder({ title: "", description: "" });
-    setDialogOpen(false);
-    
-    toast({
-      title: "Reminder added",
-      description: `Added reminder for ${date.toLocaleDateString()}`,
-    });
+    try {
+      const response = await scheduleAPI.createReminder({
+        title: newReminder.title,
+        description: newReminder.description || undefined,
+        date: date
+      });
+      
+      const formattedReminder = {
+        ...response,
+        date: new Date(response.date),
+        createdAt: response.createdAt ? new Date(response.createdAt) : undefined,
+        updatedAt: response.updatedAt ? new Date(response.updatedAt) : undefined
+      };
+      
+      setReminders([...reminders, formattedReminder]);
+      setNewReminder({ title: "", description: "" });
+      setDialogOpen(false);
+      
+      toast({
+        title: "Reminder added",
+        description: `Added reminder for ${date.toLocaleDateString()}`,
+      });
+    } catch (error) {
+      console.error("Error creating reminder:", error);
+      toast({
+        title: "Error",
+        description: "Failed to create reminder",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleDeleteReminder = (id: string) => {
-    setReminders(reminders.filter(reminder => reminder.id !== id));
-    toast({
-      title: "Reminder deleted",
-      description: "Your reminder has been deleted.",
-    });
+  const handleDeleteReminder = async (id: string) => {
+    try {
+      console.log('Deleting reminder with ID:', id);
+      await scheduleAPI.deleteReminder(id);
+      
+      setReminders(reminders.filter(reminder => reminder._id !== id));
+      
+      toast({
+        title: "Reminder deleted",
+        description: "Your reminder has been deleted.",
+      });
+    } catch (error) {
+      console.error("Error deleting reminder:", error);
+      
+      // Display more informative error message
+      let errorMessage = "Failed to delete reminder";
+      let errorTitle = "Error";
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+        
+        // Handle specific error types
+        if (errorMessage.includes('Invalid reminder ID format')) {
+          errorTitle = "Invalid Reminder ID";
+          errorMessage = "The reminder ID format is invalid.";
+        } else if (errorMessage.includes('Reminder not found')) {
+          errorTitle = "Reminder Not Found";
+          errorMessage = "The reminder may have been already deleted.";
+          
+          // Remove from state if not found on server
+          setReminders(reminders.filter(reminder => reminder._id !== id));
+        }
+      }
+      
+      toast({
+        title: errorTitle,
+        description: errorMessage,
+        variant: "destructive",
+      });
+    }
   };
 
   // Highlight dates with reminders
@@ -143,7 +245,11 @@ const SchedulePage = () => {
               </Dialog>
             </CardHeader>
             <CardContent>
-              {selectedDateReminders.length === 0 ? (
+              {loading ? (
+                <div className="text-center py-6 text-muted-foreground">
+                  Loading reminders...
+                </div>
+              ) : selectedDateReminders.length === 0 ? (
                 <div className="text-center py-6 text-muted-foreground">
                   <Bell className="mx-auto h-10 w-10 opacity-20 mb-2" />
                   <p>No reminders for this date</p>
@@ -152,7 +258,7 @@ const SchedulePage = () => {
               ) : (
                 <div className="space-y-4">
                   {selectedDateReminders.map((reminder) => (
-                    <div key={reminder.id} className="flex items-start justify-between border rounded-md p-3">
+                    <div key={reminder._id} className="flex items-start justify-between border rounded-md p-3">
                       <div>
                         <h4 className="font-medium">{reminder.title}</h4>
                         {reminder.description && (
@@ -162,7 +268,7 @@ const SchedulePage = () => {
                       <Button 
                         size="sm" 
                         variant="ghost" 
-                        onClick={() => handleDeleteReminder(reminder.id)}
+                        onClick={() => handleDeleteReminder(reminder._id)}
                       >
                         Remove
                       </Button>

@@ -1,6 +1,5 @@
-
-import React from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import React, { useEffect } from "react";
+import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import { 
   Home, CheckSquare, Book, Calendar,
   MessageCircle, User, Moon, Sun, LogOut 
@@ -28,11 +27,30 @@ interface DashboardLayoutProps {
 }
 
 export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
-  const { logout, user } = useAuth();
+  const { logout, user, isAuthenticated } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
+  const location = useLocation();
 
+  // Preserve current path on page load/refresh
+  useEffect(() => {
+    if (location.pathname) {
+      localStorage.setItem('currentPath', location.pathname);
+    }
+  }, [location.pathname]);
+
+  // Preserve current path when app state changes
+  useEffect(() => {
+    if (isAuthenticated) {
+      sessionStorage.setItem('lastLocation', location.pathname);
+    }
+  }, [location, isAuthenticated]);
+
+  // Handle manual logout
   const handleLogout = () => {
+    // Clear location data when intentionally logging out
+    sessionStorage.removeItem('lastLocation');
+    localStorage.removeItem('currentPath');
     logout();
     navigate("/login");
   };
@@ -88,7 +106,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
             </SidebarGroup>
           </SidebarContent>
           
-          <SidebarFooter className="p-4 border-t">
+          <SidebarFooter>
             <div className="flex flex-col gap-2">
               <div className="flex items-center gap-3 px-3 py-2">
                 <User className="w-5 h-5" />

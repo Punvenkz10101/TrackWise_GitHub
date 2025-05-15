@@ -1,6 +1,5 @@
-
-import React from "react";
-import { Link, useNavigate } from "react-router-dom";
+import React, { useState } from "react";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -31,8 +30,10 @@ const signupSchema = z.object({
 type SignupValues = z.infer<typeof signupSchema>;
 
 const Signup = () => {
-  const { login } = useAuth();
+  const { signupWithCredentials } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [isLoading, setIsLoading] = useState(false);
 
   const form = useForm<SignupValues>({
     resolver: zodResolver(signupSchema),
@@ -45,23 +46,35 @@ const Signup = () => {
   });
 
   const onSubmit = async (data: SignupValues) => {
+    setIsLoading(true);
     try {
-      // In a real app, you would send this data to your API
-      // For this frontend-only demo, we'll create a fake JWT token
-      const fakeToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxMjM0NTYiLCJuYW1lIjoiSm9obiBEb2UiLCJlbWFpbCI6ImpvaG5AZXhhbXBsZS5jb20iLCJleHAiOjE5MTY5MzkyNzN9.qeAR5Xq-2IVk4TCL_DHlOJTfvQ_HSUraFWIPNwA6rkU";
+      await signupWithCredentials(data.name, data.email, data.password);
       
-      login(fakeToken);
       toast({
         title: "Account created",
         description: "Welcome to TrackWise!",
       });
-      navigate("/dashboard");
+      
+      // Check for saved paths in multiple storage locations
+      const redirectPath = 
+        sessionStorage.getItem('redirectAfterLogin') || 
+        localStorage.getItem('currentPath') ||
+        (location.state?.from?.pathname) || 
+        '/dashboard';
+      
+      // Clear the stored redirect path
+      sessionStorage.removeItem('redirectAfterLogin');
+      
+      // Navigate to the redirect path or dashboard
+      navigate(redirectPath);
     } catch (error) {
       toast({
         title: "Sign up failed",
-        description: "There was a problem creating your account.",
+        description: error instanceof Error ? error.message : "There was a problem creating your account.",
         variant: "destructive",
       });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -124,8 +137,8 @@ const Signup = () => {
               </FormItem>
             )}
           />
-          <Button type="submit" className="w-full">
-            Create Account
+          <Button type="submit" className="w-full" disabled={isLoading}>
+            {isLoading ? "Creating Account..." : "Create Account"}
           </Button>
         </form>
       </Form>

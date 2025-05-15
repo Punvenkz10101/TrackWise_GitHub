@@ -1,5 +1,4 @@
-
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -40,6 +39,7 @@ import {
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import { tasksAPI } from "@/lib/api";
 
 // Task schema
 const taskSchema = z.object({
@@ -48,44 +48,19 @@ const taskSchema = z.object({
   status: z.enum(["not-started", "in-progress", "completed"]).default("not-started"),
 });
 
-type Task = z.infer<typeof taskSchema> & { id: string };
-
-// Mock initial tasks
-const initialTasks: Task[] = [
-  {
-    id: "1",
-    title: "Study calculus chapter 5",
-    dueDate: new Date(Date.now() + 86400000), // Tomorrow
-    status: "not-started",
-  },
-  {
-    id: "2",
-    title: "Complete programming assignment",
-    dueDate: new Date(Date.now() + 2 * 86400000), // Day after tomorrow
-    status: "in-progress",
-  },
-  {
-    id: "3",
-    title: "Review notes for midterm",
-    dueDate: new Date(Date.now() + 5 * 86400000), // 5 days from now
-    status: "not-started",
-  },
-  {
-    id: "4",
-    title: "Prepare presentation for class",
-    dueDate: new Date(Date.now() - 1 * 86400000), // Yesterday (overdue)
-    status: "in-progress",
-  },
-  {
-    id: "5",
-    title: "Read research paper",
-    dueDate: new Date(Date.now() - 3 * 86400000), // 3 days ago (completed)
-    status: "completed",
-  },
-];
+// Define Task interface to match backend model
+interface Task {
+  _id: string; // Changed from id to _id to match MongoDB
+  title: string;
+  dueDate: Date;
+  status: "not-started" | "in-progress" | "completed";
+  createdAt?: Date;
+  updatedAt?: Date;
+}
 
 const TasksPage = () => {
-  const [tasks, setTasks] = useState<Task[]>(initialTasks);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
 
@@ -96,6 +71,45 @@ const TasksPage = () => {
       status: "not-started",
     },
   });
+
+  // Fetch tasks on component mount
+  useEffect(() => {
+    async function fetchTasks() {
+      try {
+        setLoading(true);
+        const response = await tasksAPI.getAllTasks();
+        // Convert string dates to Date objects
+        const formattedTasks = response.map((task: Task) => ({
+          ...task,
+          dueDate: new Date(task.dueDate),
+          createdAt: new Date(task.createdAt),
+          updatedAt: new Date(task.updatedAt)
+        }));
+        setTasks(formattedTasks);
+      } catch (error) {
+        console.error("Error fetching tasks:", error);
+        
+        // Show different message for auth errors
+        if (error instanceof Error && error.message === 'Authentication failed') {
+          toast({
+            title: "Authentication Error",
+            description: "Your session may have expired. Please refresh the page or log in again.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Error",
+            description: "Failed to load tasks",
+            variant: "destructive",
+          });
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchTasks();
+  }, []);
 
   // Reset form when dialog opens
   React.useEffect(() => {
@@ -115,30 +129,87 @@ const TasksPage = () => {
     }
   }, [isAddDialogOpen, editingTask, form]);
 
-  const onSubmit = (data: z.infer<typeof taskSchema>) => {
-    if (editingTask) {
-      // Update existing task
-      setTasks(tasks.map(task => 
-        task.id === editingTask.id ? { ...task, ...data } : task
-      ));
+  const onSubmit = async (data: z.infer<typeof taskSchema>) => {
+    try {
+      if (editingTask) {
+        // Update existing task
+        const updatedTask = await tasksAPI.updateTask(editingTask._id, {
+          title: data.title,
+          dueDate: data.dueDate, 
+          status: data.status
+        });
+        
+        // Format dates for UI
+        const formattedTask = {
+          ...updatedTask,
+          dueDate: new Date(updatedTask.dueDate),
+          createdAt: updatedTask.createdAt ? new Date(updatedTask.createdAt) : undefined,
+          updatedAt: updatedTask.updatedAt ? new Date(updatedTask.updatedAt) : undefined
+        };
+        
+        setTasks(tasks.map(task => 
+          task._id === editingTask._id ? formattedTask : task
+        ));
+        
+        toast({
+          title: "Task updated",
+          description: "Your task has been updated successfully.",
+        });
+      } else {
+        // Add new task
+        const newTask = await tasksAPI.createTask({
+          title: data.title,
+          dueDate: data.dueDate,
+          status: data.status
+        });
+        
+        const formattedTask = {
+          ...newTask,
+          dueDate: new Date(newTask.dueDate),
+          createdAt: newTask.createdAt ? new Date(newTask.createdAt) : undefined,
+          updatedAt: newTask.updatedAt ? new Date(newTask.updatedAt) : undefined
+        };
+        
+        setTasks([...tasks, formattedTask]);
+        
+        toast({
+          title: "Task added",
+          description: "Your new task has been added successfully.",
+        });
+      }
+      
+      setIsAddDialogOpen(false);
+      setEditingTask(null);
+    } catch (error) {
+      console.error("Error saving task:", error);
+      
+      // Display more informative error message 
+      let errorMessage = "Failed to save task";
+      let errorTitle = "Error";
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+        
+        // Handle database-specific errors
+        if (errorMessage.includes("db already exists with different case")) {
+          errorTitle = "Database Configuration Error";
+          errorMessage = "There's a database naming conflict. Please contact your administrator.";
+        } else if (errorMessage.includes("Server error")) {
+          errorTitle = "Server Error";
+          // Keep only relevant part of the error message
+          const match = errorMessage.match(/Server error: (.+)/);
+          if (match && match[1]) {
+            errorMessage = match[1];
+          }
+        }
+      }
+      
       toast({
-        title: "Task updated",
-        description: "Your task has been updated successfully.",
-      });
-    } else {
-      // Add new task
-      const newTask: Task = {
-        id: Date.now().toString(),
-        ...data,
-      };
-      setTasks([...tasks, newTask]);
-      toast({
-        title: "Task added",
-        description: "Your new task has been added successfully.",
+        title: errorTitle,
+        description: errorMessage,
+        variant: "destructive",
       });
     }
-    setIsAddDialogOpen(false);
-    setEditingTask(null);
   };
 
   const handleEditTask = (task: Task) => {
@@ -146,22 +217,73 @@ const TasksPage = () => {
     setIsAddDialogOpen(true);
   };
 
-  const handleDeleteTask = (taskId: string) => {
-    setTasks(tasks.filter(task => task.id !== taskId));
-    toast({
-      title: "Task deleted",
-      description: "Your task has been deleted.",
-    });
+  const handleDeleteTask = async (taskId: string) => {
+    try {
+      console.log(`Attempting to delete task with ID: ${taskId}`);
+      await tasksAPI.deleteTask(taskId);
+      
+      // Remove the task from local state
+      setTasks(tasks.filter(task => task._id !== taskId));
+      
+      toast({
+        title: "Task deleted",
+        description: "Your task has been deleted.",
+      });
+    } catch (error) {
+      console.error("Error deleting task:", error);
+      
+      // Display more informative error message
+      let errorMessage = "Failed to delete task";
+      let errorTitle = "Error";
+      
+      if (error instanceof Error) {
+        // Handle specific error cases
+        if (error.message.includes("Invalid task ID format")) {
+          errorTitle = "Invalid Task ID";
+          errorMessage = "The task ID format is invalid. This may be due to a system error.";
+        } else if (error.message.includes("Task not found")) {
+          errorTitle = "Task Not Found";
+          errorMessage = "The task may have been already deleted or doesn't exist.";
+          // Remove the task from local state to maintain consistency
+          setTasks(tasks.filter(task => task._id !== taskId));
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      toast({
+        title: errorTitle,
+        description: errorMessage,
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleToggleComplete = (taskId: string) => {
-    setTasks(tasks.map(task => {
-      if (task.id === taskId) {
-        const newStatus = task.status === "completed" ? "not-started" : "completed";
-        return { ...task, status: newStatus };
-      }
-      return task;
-    }));
+  const handleToggleComplete = async (taskId: string) => {
+    try {
+      const task = tasks.find(t => t._id === taskId);
+      if (!task) return;
+      
+      const newStatus = task.status === "completed" ? "not-started" : "completed";
+      
+      const updatedTask = await tasksAPI.updateTask(taskId, { status: newStatus });
+      
+      const formattedTask = {
+        ...updatedTask,
+        dueDate: new Date(updatedTask.dueDate),
+        createdAt: updatedTask.createdAt ? new Date(updatedTask.createdAt) : undefined,
+        updatedAt: updatedTask.updatedAt ? new Date(updatedTask.updatedAt) : undefined
+      };
+      
+      setTasks(tasks.map(t => t._id === taskId ? formattedTask : t));
+    } catch (error) {
+      console.error("Error toggling task completion:", error);
+      toast({
+        title: "Error",
+        description: "Failed to update task status",
+        variant: "destructive",
+      });
+    }
   };
 
   const getStatusBadge = (status: Task["status"]) => {
@@ -301,79 +423,85 @@ const TasksPage = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12">Status</TableHead>
-                  <TableHead>Task</TableHead>
-                  <TableHead>Due Date</TableHead>
-                  <TableHead>Priority</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {tasks.map((task) => (
-                  <TableRow key={task.id}>
-                    <TableCell>
-                      <Checkbox
-                        checked={task.status === "completed"}
-                        onCheckedChange={() => handleToggleComplete(task.id)}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <div className={cn(
-                        task.status === "completed" ? "line-through text-muted-foreground" : ""
-                      )}>
-                        {task.title}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div
-                        className={cn(
-                          isTaskOverdue(task.dueDate, task.status) 
-                            ? "text-destructive font-medium" 
-                            : ""
-                        )}
-                      >
-                        {format(task.dueDate, "MMM dd, yyyy")}
-                        {isTaskOverdue(task.dueDate, task.status) && 
-                          <span className="ml-2 text-xs">(Overdue)</span>
-                        }
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {getStatusBadge(task.status)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          onClick={() => handleEditTask(task)}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          onClick={() => handleDeleteTask(task.id)}
-                          className="text-destructive hover:text-destructive/90"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {tasks.length === 0 && (
+            {loading ? (
+              <div className="flex justify-center p-4">
+                Loading tasks...
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-10 text-muted-foreground">
-                      No tasks found. Click "Add Task" to create your first task.
-                    </TableCell>
+                    <TableHead className="w-12">Status</TableHead>
+                    <TableHead>Task</TableHead>
+                    <TableHead>Due Date</TableHead>
+                    <TableHead>Priority</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {tasks.map((task) => (
+                    <TableRow key={task._id}>
+                      <TableCell>
+                        <Checkbox
+                          checked={task.status === "completed"}
+                          onCheckedChange={() => handleToggleComplete(task._id)}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <div className={cn(
+                          task.status === "completed" ? "line-through text-muted-foreground" : ""
+                        )}>
+                          {task.title}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div
+                          className={cn(
+                            isTaskOverdue(task.dueDate, task.status) 
+                              ? "text-destructive font-medium" 
+                              : ""
+                          )}
+                        >
+                          {format(task.dueDate, "MMM dd, yyyy")}
+                          {isTaskOverdue(task.dueDate, task.status) && 
+                            <span className="ml-2 text-xs">(Overdue)</span>
+                          }
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {getStatusBadge(task.status)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            onClick={() => handleEditTask(task)}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            onClick={() => handleDeleteTask(task._id)}
+                            className="text-destructive hover:text-destructive/90"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {tasks.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center py-10 text-muted-foreground">
+                        No tasks found. Click "Add Task" to create your first task.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
       </div>
