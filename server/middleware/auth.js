@@ -104,6 +104,14 @@ const auth = async (req, res, next) => {
         req.user = user;
         req.userId = user._id;
         
+        // Update lastLogin timestamp periodically (not on every request)
+        const hoursSinceLastLogin = (new Date() - new Date(user.lastLogin)) / (1000 * 60 * 60);
+        if (hoursSinceLastLogin > 6) { // Update lastLogin if more than 6 hours have passed
+          user.lastLogin = new Date();
+          await user.save();
+          console.log(`Updated lastLogin for user: ${user.email}`);
+        }
+        
         next();
       } catch (dbError) {
         console.error('Database error in auth middleware:', dbError);

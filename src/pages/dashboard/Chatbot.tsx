@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Bot, SendHorizontal, User } from "lucide-react";
+import { toast } from "@/components/ui/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface Message {
   id: string;
@@ -14,14 +16,12 @@ interface Message {
   timestamp: Date;
 }
 
-// Empty sample responses
-const sampleResponses = [];
-
 const ChatbotPage = () => {
+  const { token } = useAuth();
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "1",
-      content: "Hello! I'm your AI study assistant. How can I help you today?",
+      content: "Hello! I'm your AI study assistant. How can I help you today? You can ask about your tasks, schedule, notes, or any study-related questions.",
       sender: "ai",
       timestamp: new Date(),
     },
@@ -35,7 +35,7 @@ const ChatbotPage = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!inputValue.trim()) return;
 
     // Add user message
@@ -48,39 +48,57 @@ const ChatbotPage = () => {
     setMessages((prev) => [...prev, userMessage]);
     setInputValue("");
 
-    // Simulate AI thinking
+    // Show AI typing indicator
     setIsTyping(true);
 
-    // Simulate AI response after a delay
-    setTimeout(() => {
+    try {
+      // Call the backend API
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/chatbot/query`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ message: userMessage.content })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to get response from AI');
+      }
+
+      const data = await response.json();
+
+      // Add AI response
       const aiResponse: Message = {
         id: (Date.now() + 1).toString(),
-        content: getAIResponse(inputValue),
+        content: data.response,
         sender: "ai",
         timestamp: new Date(),
       };
-      setMessages((prev) => [...prev, aiResponse]);
-      setIsTyping(false);
-    }, 1500);
-  };
 
-  const getAIResponse = (userInput: string): string => {
-    // This is a simple simulation. In a real app, this would connect to an API
-    const lowerCaseInput = userInput.toLowerCase();
-    
-    if (lowerCaseInput.includes("hello") || lowerCaseInput.includes("hi")) {
-      return "Hello! How can I assist with your studies today?";
-    } else if (lowerCaseInput.includes("thank")) {
-      return "You're welcome! Feel free to ask if you have any more questions.";
-    } else if (lowerCaseInput.includes("help") || lowerCaseInput.includes("stuck")) {
-      return "I'd be happy to help! What specific topic or problem are you working on?";
-    } else if (lowerCaseInput.includes("math") || lowerCaseInput.includes("equation")) {
-      return "For math problems, I recommend breaking them down step by step. Can you share the specific equation or concept you're working on?";
-    } else if (lowerCaseInput.includes("study") || lowerCaseInput.includes("learn")) {
-      return "Effective studying involves active recall, spaced repetition, and connecting new information to things you already know. What subject are you focusing on?";
-    } else {
-      // Return a random response from the sample responses
-      return sampleResponses[Math.floor(Math.random() * sampleResponses.length)];
+      setMessages((prev) => [...prev, aiResponse]);
+    } catch (error) {
+      console.error('Chatbot error:', error);
+
+      // Show error toast
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to get response from AI",
+        variant: "destructive",
+      });
+
+      // Add error message from AI
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        content: "I'm sorry, I encountered an error while processing your request. Please try again later.",
+        sender: "ai",
+        timestamp: new Date(),
+      };
+
+      setMessages((prev) => [...prev, errorMessage]);
+    } finally {
+      setIsTyping(false);
     }
   };
 
@@ -121,23 +139,20 @@ const ChatbotPage = () => {
                 {messages.map((message) => (
                   <div
                     key={message.id}
-                    className={`flex ${
-                      message.sender === "user" ? "justify-end" : "justify-start"
-                    }`}
+                    className={`flex ${message.sender === "user" ? "justify-end" : "justify-start"
+                      }`}
                   >
                     <div
-                      className={`flex max-w-[80%] ${
-                        message.sender === "user"
-                          ? "flex-row-reverse"
-                          : "flex-row"
-                      }`}
+                      className={`flex max-w-[80%] ${message.sender === "user"
+                        ? "flex-row-reverse"
+                        : "flex-row"
+                        }`}
                     >
                       <div
-                        className={`flex h-8 w-8 shrink-0 select-none items-center justify-center rounded-full ${
-                          message.sender === "user"
-                            ? "ml-2 bg-primary text-primary-foreground"
-                            : "mr-2 bg-muted"
-                        }`}
+                        className={`flex h-8 w-8 shrink-0 select-none items-center justify-center rounded-full ${message.sender === "user"
+                          ? "ml-2 bg-primary text-primary-foreground"
+                          : "mr-2 bg-muted"
+                          }`}
                       >
                         {message.sender === "user" ? (
                           <User className="h-4 w-4" />
@@ -147,13 +162,12 @@ const ChatbotPage = () => {
                       </div>
                       <div>
                         <div
-                          className={`rounded-lg px-4 py-2 ${
-                            message.sender === "user"
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-muted"
-                          }`}
+                          className={`rounded-lg px-4 py-2 ${message.sender === "user"
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted"
+                            }`}
                         >
-                          <p className="text-sm">{message.content}</p>
+                          <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">
                           {message.timestamp.toLocaleTimeString([], {
@@ -190,15 +204,15 @@ const ChatbotPage = () => {
           <CardFooter className="pt-4 border-t bg-background">
             <div className="flex w-full items-center space-x-2">
               <Input
-                placeholder="Ask anything about your studies..."
+                placeholder="Ask about your tasks, notes, schedule, or any study topic..."
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyPress={handleKeyPress}
                 disabled={isTyping}
                 className="flex-1"
               />
-              <Button 
-                onClick={handleSendMessage} 
+              <Button
+                onClick={handleSendMessage}
                 disabled={!inputValue.trim() || isTyping}
               >
                 <SendHorizontal className="h-4 w-4" />

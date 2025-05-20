@@ -17,38 +17,16 @@ const base64UrlEncode = (obj) => {
 };
 
 // Generate JWT token
-const generateToken = (userId, name, email) => {
-  try {
-    return jwt.sign(
-      { 
-        userId, 
-        name, 
-        email, 
-        exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30 // 30 days
-      },
-      JWT_SECRET
-    );
-  } catch (error) {
-    console.error('JWT token generation error:', error);
-    // Fallback for development mode if token generation fails
-    if (isDev) {
-      console.log('Using development fallback token');
-      // Create a manual token for development purposes
-      const header = base64UrlEncode({ alg: "HS256", typ: "JWT" });
-      
-      const payload = base64UrlEncode({
-        userId, 
-        name, 
-        email, 
-        exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30
-      });
-      
-      const signature = "dev_signature_only_for_development";
-      
-      return `${header}.${payload}.${signature}`;
-    }
-    throw error;
-  }
+const generateToken = (user) => {
+  return jwt.sign(
+    {
+      userId: user._id,
+      name: user.name,
+      email: user.email,
+      exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30 // 30 days
+    },
+    JWT_SECRET
+  );
 };
 
 // @route   POST /api/auth/signup
@@ -57,59 +35,26 @@ const generateToken = (userId, name, email) => {
 router.post('/signup', async (req, res) => {
   try {
     const { name, email, password } = req.body;
-    
-    // Validate input
     if (!name || !email || !password) {
-      return res.status(400).json({ message: 'Please provide all required fields' });
+      return res.status(400).json({ message: 'Please provide name, email, and password.' });
     }
-    
     if (password.length < 6) {
-      return res.status(400).json({ message: 'Password must be at least 6 characters' });
+      return res.status(400).json({ message: 'Password must be at least 6 characters.' });
     }
-    
-    // Check if user already exists
     let user = await User.findOne({ email });
     if (user) {
-      return res.status(400).json({ message: 'User already exists' });
+      return res.status(400).json({ message: 'Email already registered.' });
     }
-
-    // Create new user
-    user = new User({
-      name,
-      email,
-      password,
-    });
-
-    // Save user to database
+    user = new User({ name, email, password });
     await user.save();
-    console.log(`New user created: ${email} (${user._id})`);
-
-    // Generate token
-    const token = generateToken(user._id, user.name, user.email);
-
+    const token = generateToken(user);
     res.status(201).json({
       token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-      }
+      user: { id: user._id, name: user.name, email: user.email }
     });
   } catch (error) {
     console.error('Signup error:', error);
-    
-    // Handle MongoDB validation errors
-    if (error.name === 'ValidationError') {
-      const messages = Object.values(error.errors).map(err => err.message);
-      return res.status(400).json({ message: messages.join(', ') });
-    }
-    
-    // Handle MongoDB duplicate key error (in case unique index catches what our check missed)
-    if (error.code === 11000) {
-      return res.status(400).json({ message: 'Email already registered' });
-    }
-    
-    res.status(500).json({ message: 'Server error during registration' });
+    res.status(500).json({ message: 'Server error during registration.' });
   }
 });
 
@@ -119,46 +64,27 @@ router.post('/signup', async (req, res) => {
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    
-    // Validate input
     if (!email || !password) {
-      return res.status(400).json({ message: 'Please provide both email and password' });
+      return res.status(400).json({ message: 'Please provide both email and password.' });
     }
-
-    // Check if user exists
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(400).json({ message: 'Invalid credentials' });
+      return res.status(400).json({ message: 'Invalid credentials.' });
     }
-
-    // Check password
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
-      return res.status(400).json({ message: 'Invalid credentials' });
+      return res.status(400).json({ message: 'Invalid credentials.' });
     }
-    
-    console.log(`User logged in: ${email} (${user._id})`);
-
-    // Generate token
-    const token = generateToken(user._id, user.name, user.email);
-
+    user.lastLogin = new Date();
+    await user.save();
+    const token = generateToken(user);
     res.json({
       token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-      }
+      user: { id: user._id, name: user.name, email: user.email }
     });
   } catch (error) {
     console.error('Login error:', error);
-    
-    // Provide more specific error message based on the error type
-    if (error.name === 'MongoServerError') {
-      return res.status(500).json({ message: 'Database error, please try again later' });
-    }
-    
-    res.status(500).json({ message: 'Server error during login' });
+    res.status(500).json({ message: 'Server error during login.' });
   }
 });
 
@@ -167,29 +93,14 @@ router.post('/login', async (req, res) => {
 // @access  Private
 router.get('/me', auth, async (req, res) => {
   try {
-    // The auth middleware already verified and set req.user
-    const user = await User.findById(req.user._id).select('-password');
-    
+    const user = await User.findById(req.user.userId).select('-password');
     if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(404).json({ message: 'User not found.' });
     }
-    
-    res.json({
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-      }
-    });
+    res.json({ user: { id: user._id, name: user.name, email: user.email } });
   } catch (error) {
     console.error('Get user error:', error);
-    
-    // Handle MongoDB ObjectId format errors
-    if (error.kind === 'ObjectId') {
-      return res.status(400).json({ message: 'Invalid user ID format' });
-    }
-    
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: 'Server error.' });
   }
 });
 

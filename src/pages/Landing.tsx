@@ -1,13 +1,13 @@
-
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Moon, Sun, CheckCircle, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTheme } from '@/contexts/ThemeContext';
 
 const LandingPage = () => {
   const { theme, toggleTheme } = useTheme();
-  
+  const navigate = useNavigate();
+
   const features = [
     {
       title: 'Task Scheduler',
@@ -31,6 +31,20 @@ const LandingPage = () => {
     }
   ];
 
+  const handleLoginClick = () => {
+    // Clear any redirects that might skip the login page
+    sessionStorage.removeItem('redirectAfterLogin');
+    localStorage.removeItem('currentPath');
+    navigate('/login');
+  };
+
+  const handleSignupClick = () => {
+    // Clear any redirects that might skip the signup page
+    sessionStorage.removeItem('redirectAfterLogin');
+    localStorage.removeItem('currentPath');
+    navigate('/signup');
+  };
+
   return (
     <div className="flex min-h-screen flex-col">
       {/* Header */}
@@ -42,11 +56,11 @@ const LandingPage = () => {
           <span>TrackWise</span>
         </Link>
         <nav className="ml-auto flex gap-4 sm:gap-6">
-          <Button variant="ghost" asChild>
-            <Link to="/login">Login</Link>
+          <Button variant="ghost" onClick={handleLoginClick}>
+            Login
           </Button>
-          <Button className="animate-pulse-light" asChild>
-            <Link to="/signup">Sign Up</Link>
+          <Button className="animate-pulse-light" onClick={handleSignupClick}>
+            Sign Up
           </Button>
           <Button
             variant="ghost"
@@ -73,14 +87,12 @@ const LandingPage = () => {
                 </p>
               </div>
               <div className="flex flex-col gap-2 min-[400px]:flex-row">
-                <Button size="lg" className="animate-fade-in" asChild>
-                  <Link to="/signup">
-                    Get Started
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Link>
+                <Button size="lg" className="animate-fade-in" onClick={handleSignupClick}>
+                  Get Started
+                  <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
-                <Button size="lg" variant="outline" className="animate-fade-in delay-200" asChild>
-                  <Link to="/login">Login</Link>
+                <Button size="lg" variant="outline" className="animate-fade-in delay-200" onClick={handleLoginClick}>
+                  Login
                 </Button>
               </div>
             </div>
@@ -132,8 +144,8 @@ const LandingPage = () => {
           </div>
           <div className="mx-auto grid max-w-5xl grid-cols-1 gap-6 py-12 sm:grid-cols-2 md:gap-12">
             {features.map((feature, index) => (
-              <div 
-                key={index} 
+              <div
+                key={index}
                 className="flex animate-fade-in flex-col items-center space-y-2 rounded-lg border p-4 transition-all hover:shadow-md"
                 style={{ animationDelay: `${index * 100}ms` }}
               >
@@ -163,11 +175,9 @@ const LandingPage = () => {
               </p>
             </div>
             <div className="flex flex-col gap-2 min-[400px]:flex-row">
-              <Button size="lg" variant="secondary" className="hover:bg-white" asChild>
-                <Link to="/signup">
-                  Get Started
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Link>
+              <Button size="lg" variant="secondary" className="hover:bg-white" onClick={handleSignupClick}>
+                Get Started
+                <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </div>
           </div>

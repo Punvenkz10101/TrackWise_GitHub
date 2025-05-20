@@ -28,7 +28,7 @@ type JWTPayload = {
   exp: number;
 };
 
-// Always create a development user for dev environment
+// Create a development user for dev environment
 const getDevUser = () => {
   return {
     id: localStorage.getItem('dev-user-id') || "dev-user-id",
@@ -45,7 +45,7 @@ const createDefaultToken = () => {
     alg: "HS256",
     typ: "JWT"
   };
-  
+
   // Use a consistent dev userId that persists in localStorage
   let devUserId = localStorage.getItem('dev-user-id');
   if (!devUserId) {
@@ -55,44 +55,44 @@ const createDefaultToken = () => {
     const machineId = Math.floor(Math.random() * 16777216).toString(16).padStart(6, '0');
     const processId = Math.floor(Math.random() * 65536).toString(16).padStart(4, '0');
     const counter = Math.floor(Math.random() * 16777216).toString(16).padStart(6, '0');
-    
+
     // Ensure exactly 24 hex characters
     devUserId = timestamp + machineId.substring(0, 4) + processId.substring(0, 4) + counter.substring(0, 8);
-    
+
     // Validate that it's exactly 24 characters
     if (devUserId.length !== 24) {
       // If not, create a simple 24-char hex string
-      devUserId = Array.from({length: 24}, () => 
+      devUserId = Array.from({ length: 24 }, () =>
         Math.floor(Math.random() * 16).toString(16)).join('');
     }
-    
+
     localStorage.setItem('dev-user-id', devUserId);
   } else if (devUserId.length !== 24) {
     // If stored ID is invalid, regenerate it
-    devUserId = Array.from({length: 24}, () => 
+    devUserId = Array.from({ length: 24 }, () =>
       Math.floor(Math.random() * 16).toString(16)).join('');
     localStorage.setItem('dev-user-id', devUserId);
   }
-  
+
   const payload = {
     userId: devUserId,
     name: "Development User",
     email: "dev@example.com",
     exp: Math.floor(Date.now() / 1000) + 24 * 60 * 60, // 24 hours from now
   };
-  
+
   const encodeBase64 = (obj: Record<string, unknown>) => {
     return btoa(JSON.stringify(obj))
       .replace(/=/g, '')
       .replace(/\+/g, '-')
       .replace(/\//g, '_');
   };
-  
+
   const headerEncoded = encodeBase64(header);
   const payloadEncoded = encodeBase64(payload);
   // In development, we use a fake signature (in production this would be cryptographically generated)
   const signature = "dev_signature_not_valid_for_production";
-  
+
   return `${headerEncoded}.${payloadEncoded}.${signature}`;
 };
 
@@ -109,16 +109,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (isDev) {
         return true;
       }
-      
+
       const headers = {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
       };
-      
+
       const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/auth/me`, {
         headers
       });
-      
+
       return response.ok;
     } catch (error) {
       console.error("Token validation error:", error);
@@ -128,31 +128,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     const initAuth = async () => {
-      // For development mode always stay logged in with dev token
-      if (isDev) {
-        // Always create a fresh token to avoid expiration issues
-        const devToken = createDefaultToken();
-        saveToken(devToken);
-        setToken(devToken);
-        setUser(getDevUser());
-        setIsAuthenticated(true);
-        
-        // Log development mode authentication
-        console.log("Development mode: Using development authentication");
-        return;
-      }
-
-      // For production mode, check token properly
+      // Check for stored token in both dev and production
       const storedToken = getToken();
+
       if (storedToken) {
         try {
           const payload = jwtDecode<JWTPayload>(storedToken);
           const currentTime = Date.now() / 1000;
-          
+
           if (payload.exp > currentTime) {
             // Additional validation by checking with the server
             const isValid = await validateToken(storedToken);
-            
+
             if (isValid) {
               setToken(storedToken);
               setUser({
@@ -182,41 +169,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = (newToken: string) => {
     try {
       saveToken(newToken);
-      
-      // In development, always use the dev user
-      if (isDev) {
-        setToken(newToken);
-        setUser(getDevUser());
-        setIsAuthenticated(true);
-        return;
-      }
-      
-      // In production, decode the token
+
+      // In development, use the token but still decode it
       const payload = jwtDecode<JWTPayload>(newToken);
       setToken(newToken);
-      setUser({
-        id: payload.userId,
-        name: payload.name,
-        email: payload.email,
-      });
+
+      if (isDev) {
+        // In dev, use the dev user info but still require login
+        const devUser = getDevUser();
+        setUser({
+          id: payload.userId || devUser.id,
+          name: payload.name || devUser.name,
+          email: payload.email || devUser.email,
+        });
+      } else {
+        // In production, decode the token normally
+        setUser({
+          id: payload.userId,
+          name: payload.name,
+          email: payload.email,
+        });
+      }
+
       setIsAuthenticated(true);
     } catch (error) {
       console.error("Error logging in:", error);
-      
-      // For development, create a default token if login fails
-      if (isDev) {
-        const defaultToken = createDefaultToken();
-        saveToken(defaultToken);
-        setToken(defaultToken);
-        setUser(getDevUser());
-        setIsAuthenticated(true);
-      }
+      throw new Error("Login failed: Invalid token");
     }
   };
 
   const loginWithCredentials = async (email: string, password: string) => {
     if (isDev) {
-      console.log("Development mode login - using dev token");
+      console.log("Development mode login");
+      // Simulate a successful login but require credentials
       login(createDefaultToken());
       return;
     }
@@ -224,18 +209,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       console.log("Attempting login with credentials");
       const response = await authAPI.login(email, password);
-      
+
       if (!response || !response.token) {
         throw new Error("Invalid response from server");
       }
-      
+
       console.log("Login successful, token received");
       login(response.token);
     } catch (error) {
       console.error("Login error:", error);
       // Provide more specific error message based on the error
       let errorMessage = "Login failed";
-      
+
       if (error instanceof Error) {
         if (error.message.includes("Invalid credentials")) {
           errorMessage = "Invalid email or password";
@@ -243,14 +228,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           errorMessage = "Cannot connect to server";
         }
       }
-      
+
       throw new Error(errorMessage);
     }
   };
 
   const signupWithCredentials = async (name: string, email: string, password: string) => {
     if (isDev) {
-      console.log("Development mode signup - using dev token");
+      console.log("Development mode signup");
+      // Simulate a successful signup but require credentials
       login(createDefaultToken());
       return;
     }
@@ -258,18 +244,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       console.log("Attempting signup with credentials");
       const response = await authAPI.signup(name, email, password);
-      
+
       if (!response || !response.token) {
         throw new Error("Invalid response from server");
       }
-      
+
       console.log("Signup successful, token received");
       login(response.token);
     } catch (error) {
       console.error("Signup error:", error);
       // Provide more specific error message based on the error
       let errorMessage = "Signup failed";
-      
+
       if (error instanceof Error) {
         if (error.message.includes("User already exists")) {
           errorMessage = "Email is already registered";
@@ -277,19 +263,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           errorMessage = "Cannot connect to server";
         }
       }
-      
+
       throw new Error(errorMessage);
     }
   };
 
   const logout = () => {
-    // For development mode, don't actually log out
-    if (isDev) {
-      console.log("Logout attempted in development mode - ignoring");
-      return;
-    }
-    
-    // For production
     removeToken();
     setToken(null);
     setUser(null);
@@ -297,14 +276,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ 
-      user, 
-      token, 
-      login, 
-      logout, 
-      isAuthenticated, 
-      loginWithCredentials, 
-      signupWithCredentials 
+    <AuthContext.Provider value={{
+      user,
+      token,
+      login,
+      logout,
+      isAuthenticated,
+      loginWithCredentials,
+      signupWithCredentials
     }}>
       {children}
     </AuthContext.Provider>

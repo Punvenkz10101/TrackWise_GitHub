@@ -27,22 +27,22 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated } = useAuth();
   const location = useLocation();
   const [isAuthChecked, setIsAuthChecked] = useState(false);
-  
+
   // Wait for authentication to be checked
   useEffect(() => {
     // Short timeout to ensure auth state is fully initialized
     const timer = setTimeout(() => {
       setIsAuthChecked(true);
     }, 100);
-    
+
     return () => clearTimeout(timer);
   }, []);
-  
+
   // Don't render anything until authentication is checked
   if (!isAuthChecked) {
     return null;
   }
-  
+
   // If not authenticated, save the current location and redirect to login
   if (!isAuthenticated) {
     // Store the current path to redirect back after login
@@ -52,7 +52,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     }
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
-  
+
   return <>{children}</>;
 };
 
@@ -60,27 +60,26 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 const AuthRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated } = useAuth();
   const [isAuthChecked, setIsAuthChecked] = useState(false);
-  
+
   // Wait for authentication to be checked
   useEffect(() => {
     const timer = setTimeout(() => {
       setIsAuthChecked(true);
     }, 100);
-    
+
     return () => clearTimeout(timer);
   }, []);
-  
+
   // Don't render anything until authentication is checked
   if (!isAuthChecked) {
     return null;
   }
-  
-  // If already authenticated, redirect to dashboard or saved location
+
+  // If already authenticated, redirect to dashboard
   if (isAuthenticated) {
-    const savedPath = localStorage.getItem('currentPath') || '/dashboard';
-    return <Navigate to={savedPath} replace />;
+    return <Navigate to="/dashboard" replace />;
   }
-  
+
   return <>{children}</>;
 };
 
@@ -99,7 +98,7 @@ const AppRoutes = () => {
           <Signup />
         </AuthRoute>
       } />
-      
+
       {/* Protected routes */}
       <Route path="/dashboard" element={
         <ProtectedRoute>
@@ -131,7 +130,7 @@ const AppRoutes = () => {
           <ProfilePage />
         </ProtectedRoute>
       } />
-      
+
       {/* Catch-all route */}
       <Route path="*" element={<NotFound />} />
     </Routes>
