@@ -18,6 +18,7 @@ import NotesPage from "./pages/dashboard/Notes";
 import SchedulePage from "./pages/dashboard/Schedule";
 import ChatbotPage from "./pages/dashboard/Chatbot";
 import ProfilePage from "./pages/dashboard/Profile";
+import PomodoroPage from "./pages/dashboard/Pomodoro";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -128,6 +129,11 @@ const AppRoutes = () => {
       <Route path="/profile" element={
         <ProtectedRoute>
           <ProfilePage />
+        </ProtectedRoute>
+      } />
+      <Route path="/pomodoro" element={
+        <ProtectedRoute>
+          <PomodoroPage />
         </ProtectedRoute>
       } />
 

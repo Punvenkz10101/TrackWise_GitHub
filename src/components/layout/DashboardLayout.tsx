@@ -2,7 +2,7 @@ import React, { useEffect } from "react";
 import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import { 
   Home, CheckSquare, Book, Calendar,
-  MessageCircle, User, Moon, Sun, LogOut 
+  MessageCircle, User, Moon, Sun, LogOut, Target 
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -57,6 +57,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
 
   const navItems = [
     { title: "Dashboard", icon: Home, path: "/dashboard" },
+    { title: "Pomodoro", icon: Target, path: "/pomodoro" },
     { title: "Tasks", icon: CheckSquare, path: "/tasks" },
     { title: "Notes", icon: Book, path: "/notes" },
     { title: "Schedule", icon: Calendar, path: "/schedule" },
