@@ -4,7 +4,8 @@ const noteSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: true,
+    index: true
   },
   title: {
     type: String,
@@ -15,21 +16,9 @@ const noteSchema = new mongoose.Schema({
     type: String,
     required: false,
     default: ''
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now
   }
-});
-
-// Update the updatedAt timestamp before saving
-noteSchema.pre('save', function(next) {
-  this.updatedAt = Date.now();
-  next();
+}, { 
+  timestamps: true 
 });
 
 const Note = mongoose.model('Note', noteSchema);

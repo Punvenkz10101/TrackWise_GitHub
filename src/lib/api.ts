@@ -1,28 +1,33 @@
-import { getToken } from './auth';
+import MultiBrowserAuth from './multiBrowserAuth';
 
 // Define the API URL
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 const isDev = import.meta.env.DEV;
 
-// Log the API URL being used at startup (helps with debugging)
-if (isDev) {
-  console.log('API URL:', API_URL);
-}
+// API URL configuration
 
 /**
  * Base fetch function with authentication
  */
 const fetchWithAuth = async (endpoint: string, options: RequestInit = {}) => {
-  const token = getToken();
-  
+  let token = null;
+
+  // Only try to get token for non-auth endpoints
+  if (!endpoint.includes('/auth/login') && !endpoint.includes('/auth/signup')) {
+    try {
+      token = MultiBrowserAuth.getToken();
+    } catch (error) {
+      // During initialization or when no user is set, this might fail
+    }
+  }
+
   // Check if token exists when making requests to protected endpoints
   if (!token && !endpoint.includes('/auth/login') && !endpoint.includes('/auth/signup')) {
-    if (isDev) {
-      console.error('No authentication token found. You may need to log in again.');
-    }
     throw new Error('Authentication required');
   }
-  
+
+
+
   const headers = {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -33,20 +38,20 @@ const fetchWithAuth = async (endpoint: string, options: RequestInit = {}) => {
     // Set a timeout for the fetch request
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-    
+
     const response = await fetch(`${API_URL}${endpoint}`, {
       ...options,
       headers,
       signal: controller.signal
     });
-    
+
     // Clear the timeout
     clearTimeout(timeoutId);
 
     if (!response.ok) {
       let errorData = {};
       let errorMessage = 'API request failed';
-      
+
       try {
         errorData = await response.json();
         errorMessage = errorData.message || errorMessage;
@@ -62,7 +67,7 @@ const fetchWithAuth = async (endpoint: string, options: RequestInit = {}) => {
           // Ignore text parsing errors
         }
       }
-      
+
       // Log additional debug info in development
       if (isDev) {
         console.error(`API Error (${response.status}):`, {
@@ -73,7 +78,7 @@ const fetchWithAuth = async (endpoint: string, options: RequestInit = {}) => {
           requestBody: options.body ? JSON.parse(options.body.toString()) : null
         });
       }
-      
+
       // Special handling for different error types
       if (response.status === 401) {
         throw new Error(`Authentication failed: ${errorMessage}`);
@@ -84,7 +89,7 @@ const fetchWithAuth = async (endpoint: string, options: RequestInit = {}) => {
       } else if (response.status === 500) {
         throw new Error(`Server error: ${errorMessage}`);
       }
-      
+
       throw new Error(errorMessage);
     }
 
@@ -95,16 +100,16 @@ const fetchWithAuth = async (endpoint: string, options: RequestInit = {}) => {
       console.error(`Connection error to ${API_URL}${endpoint}. The server may be down or unreachable.`);
       throw new Error(`Could not connect to server. Please check your network connection and make sure the server is running.`);
     }
-    
+
     if (error.name === 'AbortError') {
       console.error(`Request to ${API_URL}${endpoint} timed out after 10 seconds.`);
       throw new Error(`Request timed out. The server may be overloaded or unreachable.`);
     }
-    
+
     // Rethrow the error, but add more context in development
     if (isDev && error instanceof Error) {
       console.error(`API call to ${endpoint} failed:`, error.message);
-      console.error('Request details:', { 
+      console.error('Request details:', {
         method: options.method || 'GET',
         endpoint,
         body: options.body ? JSON.parse(options.body.toString()) : undefined
@@ -116,7 +121,7 @@ const fetchWithAuth = async (endpoint: string, options: RequestInit = {}) => {
 
 // Auth API
 export const authAPI = {
-  login: (email: string, password: string) => 
+  login: (email: string, password: string) =>
     fetchWithAuth('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
@@ -210,9 +215,9 @@ export const scheduleAPI = {
 export const progressAPI = {
   getAllProgress: () => fetchWithAuth('/progress'),
 
-  saveProgress: (progressData: { 
-    date: Date; 
-    completedTasks?: number; 
+  saveProgress: (progressData: {
+    date: Date;
+    completedTasks?: number;
     studyHours?: number;
     subjects?: Array<{ name: string; value: number }>;
   }) =>
@@ -221,9 +226,25 @@ export const progressAPI = {
       body: JSON.stringify(progressData),
     }),
 
-  getSummary: (days?: number) => 
+  getSummary: (days?: number) =>
     fetchWithAuth(`/progress/summary${days ? `?days=${days}` : ''}`),
 
-  getDailyData: (days?: number) => 
+  getDailyData: (days?: number) =>
     fetchWithAuth(`/progress/daily${days ? `?days=${days}` : ''}`),
+};
+
+// Export the base API object for room functionality
+export const api = {
+  get: (endpoint: string) => fetchWithAuth(endpoint),
+  post: (endpoint: string, data: any) => fetchWithAuth(endpoint, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+  put: (endpoint: string, data: any) => fetchWithAuth(endpoint, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  }),
+  delete: (endpoint: string) => fetchWithAuth(endpoint, {
+    method: 'DELETE',
+  }),
 }; 

@@ -125,9 +125,9 @@ router.put('/:id', auth, async (req, res) => {
       return res.status(404).json({ message: 'Note not found' });
     }
 
-    // Update note
-    note = await Note.findByIdAndUpdate(
-      noteId,
+    // Update note - ensure we filter by userId for security
+    note = await Note.findOneAndUpdate(
+      { _id: noteId, userId: req.userId },
       { $set: noteFields },
       { new: true }
     );

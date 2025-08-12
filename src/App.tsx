@@ -16,8 +16,12 @@ import Dashboard from "./pages/dashboard/Dashboard";
 import TasksPage from "./pages/dashboard/Tasks";
 import NotesPage from "./pages/dashboard/Notes";
 import SchedulePage from "./pages/dashboard/Schedule";
+import RoomsPage from "./pages/dashboard/Rooms";
+import CreateRoomPage from "./pages/dashboard/CreateRoom";
+import JoinRoomPage from "./pages/dashboard/JoinRoom";
+import RoomPage from "./pages/dashboard/RoomPage";
 import ChatbotPage from "./pages/dashboard/Chatbot";
-import ProfilePage from "./pages/dashboard/Profile";
+
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -65,14 +69,14 @@ const AuthRoute = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     const timer = setTimeout(() => {
       setIsAuthChecked(true);
-    }, 100);
+    }, 200); // Increased timeout to ensure auth is ready
 
     return () => clearTimeout(timer);
   }, []);
 
   // Don't render anything until authentication is checked
   if (!isAuthChecked) {
-    return null;
+    return <div style={{ padding: '20px', textAlign: 'center' }}>Loading...</div>;
   }
 
   // If already authenticated, redirect to dashboard
@@ -120,19 +124,35 @@ const AppRoutes = () => {
           <SchedulePage />
         </ProtectedRoute>
       } />
+      <Route path="/rooms" element={
+        <ProtectedRoute>
+          <RoomsPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/rooms/create" element={
+        <ProtectedRoute>
+          <CreateRoomPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/rooms/join" element={
+        <ProtectedRoute>
+          <JoinRoomPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/room/:roomKey" element={
+        <ProtectedRoute>
+          <RoomPage />
+        </ProtectedRoute>
+      } />
       <Route path="/chatbot" element={
         <ProtectedRoute>
           <ChatbotPage />
         </ProtectedRoute>
       } />
-      <Route path="/profile" element={
-        <ProtectedRoute>
-          <ProfilePage />
-        </ProtectedRoute>
-      } />
+
 
       {/* Catch-all route */}
-      <Route path="*" element={<NotFound />} />
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );
 };

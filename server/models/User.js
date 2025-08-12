@@ -12,21 +12,20 @@ const userSchema = new mongoose.Schema({
     required: true,
     unique: true,
     trim: true,
-    lowercase: true
+    lowercase: true,
+    index: true
   },
   password: {
     type: String,
     required: true,
     minlength: 6
   },
-  createdAt: {
-    type: Date,
-    default: Date.now
-  },
   lastLogin: {
     type: Date,
     default: Date.now
   }
+}, { 
+  timestamps: true 
 });
 
 // Hash password before saving

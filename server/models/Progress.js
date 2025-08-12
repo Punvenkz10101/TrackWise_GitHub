@@ -4,7 +4,8 @@ const progressSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: true,
+    index: true
   },
   date: {
     type: Date,
@@ -27,21 +28,9 @@ const progressSchema = new mongoose.Schema({
       type: Number,
       required: true
     }
-  }],
-  createdAt: {
-    type: Date,
-    default: Date.now
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now
-  }
-});
-
-// Update the updatedAt timestamp before saving
-progressSchema.pre('save', function(next) {
-  this.updatedAt = Date.now();
-  next();
+  }]
+}, { 
+  timestamps: true 
 });
 
 const Progress = mongoose.model('Progress', progressSchema);

@@ -11,7 +11,7 @@ interface CustomQuillProps extends ReactQuillProps {
 // Create a forwardRef wrapper for ReactQuill
 const CustomQuill = forwardRef<ReactQuill, CustomQuillProps>((props, ref) => {
   const quillRef = useRef<ReactQuill>(null);
-  
+
   // Forward the ref properly to the ReactQuill instance
   useImperativeHandle(ref, () => ({
     // Expose the underlying ReactQuill instance and its methods
@@ -23,7 +23,7 @@ const CustomQuill = forwardRef<ReactQuill, CustomQuillProps>((props, ref) => {
     // You can add more methods here if needed
     ...quillRef.current
   }));
-  
+
   // Memoize modules and formats
   const modules = useMemo(() => {
     return {
@@ -31,14 +31,16 @@ const CustomQuill = forwardRef<ReactQuill, CustomQuillProps>((props, ref) => {
       // You can add custom module options here if needed
     };
   }, [props.modules]);
-  
+
   const formats = useMemo(() => props.formats, [props.formats]);
-  
-  // Suppress the DOMNodeInserted deprecation warning in development
+
+  // Suppress the findDOMNode deprecation warning in development
   useEffect(() => {
     // Only in development, suppress specific console warnings related to ReactQuill
     if (import.meta.env.DEV) {
       const originalError = console.error;
+      const originalWarn = console.warn;
+
       console.error = (...args) => {
         // Filter out specific warnings
         if (typeof args[0] === 'string') {
@@ -52,14 +54,25 @@ const CustomQuill = forwardRef<ReactQuill, CustomQuillProps>((props, ref) => {
         }
         originalError(...args);
       };
-      
+
+      console.warn = (...args) => {
+        // Filter out findDOMNode warnings
+        if (typeof args[0] === 'string') {
+          if (args[0].includes('Warning: findDOMNode is deprecated')) {
+            return; // Don't log these warnings
+          }
+        }
+        originalWarn(...args);
+      };
+
       // Cleanup
       return () => {
         console.error = originalError;
+        console.warn = originalWarn;
       };
     }
   }, []);
-  
+
   // Wrap ReactQuill with our custom props
   return (
     <ReactQuill

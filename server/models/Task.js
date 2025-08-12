@@ -4,7 +4,8 @@ const taskSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: true,
+    index: true
   },
   title: {
     type: String,
@@ -19,21 +20,9 @@ const taskSchema = new mongoose.Schema({
     type: String,
     enum: ['not-started', 'in-progress', 'completed'],
     default: 'not-started'
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now
   }
-});
-
-// Update the updatedAt timestamp before saving
-taskSchema.pre('save', function(next) {
-  this.updatedAt = Date.now();
-  next();
+}, { 
+  timestamps: true 
 });
 
 const Task = mongoose.model('Task', taskSchema);

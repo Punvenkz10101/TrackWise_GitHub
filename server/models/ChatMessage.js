@@ -4,7 +4,8 @@ const ChatMessageSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: true,
+    index: true
   },
   role: {
     type: String,
@@ -14,11 +15,9 @@ const ChatMessageSchema = new mongoose.Schema({
   message: {
     type: String,
     required: true
-  },
-  timestamp: {
-    type: Date,
-    default: Date.now
   }
+}, { 
+  timestamps: true 
 });
 
 const ChatMessage = mongoose.model('ChatMessage', ChatMessageSchema);

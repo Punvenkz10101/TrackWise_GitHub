@@ -4,91 +4,58 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-
-    /* TrackWise Color - Purple */
-    --primary: 180 91% 53%; /* HSL equivalent of #0FD9D9 */
-    --primary-foreground: 0 0% 98%;
-
-    /* Light blue secondary */
-    --secondary: 220 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-
-    /* Soft purple accent */
-    --accent: 260 30% 90%;
-    --accent-foreground: 260 60% 30%;
-
+    --background: 0 0% 0%;
+    --foreground: 0 0% 100%;
+    --card: 0 0% 0%;
+    --card-foreground: 0 0% 100%;
+    --popover: 0 0% 0%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 0 0% 10%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 0 0% 10%;
+    --muted-foreground: 215.4 16.3% 70%;
+    --accent: 0 0% 10%;
+    --accent-foreground: 0 0% 100%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
-
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 260 60% 55%;
-
-    --radius: 0.75rem;
-
-    /* Sidebar customization */
-    --sidebar-background: 260 40% 98%;
-    --sidebar-foreground: 260 50% 30%;
-    --sidebar-primary: 260 60% 55%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 260 30% 94%;
-    --sidebar-accent-foreground: 260 50% 30%;
-    --sidebar-border: 260 30% 90%;
-    --sidebar-ring: 260 60% 55%;
+    --border: 0 0% 20%;
+    --input: 0 0% 20%;
+    --ring: 222.2 84% 4.9%;
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+    --radius: 0.5rem;
   }
 
   .dark {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-
-    --card: 240 10% 5.9%;
-    --card-foreground: 0 0% 98%;
-
-    --popover: 240 10% 5.9%;
-    --popover-foreground: 0 0% 98%;
-
-    /* TrackWise Color - Bright Purple */
-    --primary: 180 91% 53%;
-    --primary-foreground: 0 0% 100%;
-
-    /* Dark blue secondary */
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
-
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-
-    /* Dark purple accent */
-    --accent: 260 40% 20%;
-    --accent-foreground: 0 0% 98%;
-
+    --background: 0 0% 0%;
+    --foreground: 0 0% 100%;
+    --card: 0 0% 0%;
+    --card-foreground: 0 0% 100%;
+    --popover: 0 0% 0%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 0 0% 10%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 0 0% 10%;
+    --muted-foreground: 215 20.2% 70%;
+    --accent: 0 0% 10%;
+    --accent-foreground: 0 0% 100%;
     --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 260 70% 65%;
-
-    /* Dark mode sidebar */
-    --sidebar-background: 240 10% 5.9%;
-    --sidebar-foreground: 0 0% 98%;
-    --sidebar-primary: 260 70% 65%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 8% 12%;
-    --sidebar-accent-foreground: 0 0% 98%;
-    --sidebar-border: 240 8% 12%;
-    --sidebar-ring: 260 70% 65%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 0 0% 20%;
+    --input: 0 0% 20%;
+    --ring: 212.7 26.8% 83.9%;
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
   }
 }
 
@@ -99,5 +66,68 @@
 
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+/* Hide unwanted Zego UI elements */
+.zego-container [data-testid="join-meeting-button"],
+.zego-container .zego-join-meeting-button,
+.zego-container .zego-join-button,
+.zego-container .zego-personal-link,
+.zego-container [data-testid="personal-link"] {
+  display: none !important;
+}
+
+/* Additional selectors for Zego UI elements */
+.zego-container button[class*="join"],
+.zego-container div[class*="join"],
+.zego-container a[class*="personal"],
+.zego-container div[class*="personal"] {
+  display: none !important;
+}
+
+@layer components {
+
+  /* Remove purple focus borders and use cyan */
+  input:focus,
+  textarea:focus,
+  select:focus {
+    outline: none !important;
+    border-color: rgb(15, 217, 217) !important;
+    box-shadow: 0 0 0 2px rgba(15, 217, 217, 0.2) !important;
+  }
+
+  /* Override any purple focus styles */
+  *:focus {
+    outline: none !important;
+  }
+
+  *:focus-visible {
+    outline: 2px solid rgb(15, 217, 217) !important;
+    outline-offset: 2px !important;
+  }
+
+  /* Zego Cloud modal container constraints */
+  .zego-container {
+    position: relative !important;
+    width: 100% !important;
+    height: 100% !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    overflow: hidden !important;
+  }
+
+  .zego-container * {
+    max-width: 100% !important;
+    max-height: 100% !important;
+  }
+
+  /* Ensure Zego modal stays within bounds */
+  [data-zego-container] {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    overflow: hidden !important;
   }
 }

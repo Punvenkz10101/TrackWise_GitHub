@@ -1,11 +1,10 @@
-import React, { useState, useRef, useEffect, useMemo, forwardRef, useCallback, RefObject } from "react";
+import React, { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/use-toast";
-import ReactQuill from "react-quill";
-import "react-quill/dist/quill.snow.css";
+import CustomQuill from "@/components/CustomQuill";
 import { Folder, Plus, Save, Search, Trash2 } from "lucide-react";
 import { notesAPI } from "@/lib/api";
 
@@ -17,23 +16,6 @@ interface Note {
   updatedAt: Date;
 }
 
-// Better typed wrapper for ReactQuill to handle refs properly
-interface QuillEditorProps {
-  theme?: string;
-  value: string;
-  onChange: (value: string) => void;
-  modules?: unknown;
-  formats?: string[];
-  className?: string;
-}
-
-// Create a properly typed forwardRef wrapper for ReactQuill
-const QuillEditor = forwardRef<ReactQuill, QuillEditorProps>((props, ref) => {
-  return <ReactQuill {...props} ref={ref} />;
-});
-
-QuillEditor.displayName = 'QuillEditor';
-
 const NotesPage = () => {
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,7 +24,7 @@ const NotesPage = () => {
   const [newNoteTitle, setNewNoteTitle] = useState("");
   const [isCreatingNote, setIsCreatingNote] = useState(false);
   const [editorContent, setEditorContent] = useState("");
-  const quillRef = useRef<ReactQuill>(null);
+  const quillRef = useRef<any>(null);
   const [isSaving, setIsSaving] = useState(false);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -61,7 +43,7 @@ const NotesPage = () => {
         setNotes(formattedNotes);
       } catch (error) {
         console.error("Error fetching notes:", error);
-        
+
         // Show different message for auth errors
         if (error instanceof Error && error.message === 'Authentication failed') {
           toast({
@@ -95,13 +77,13 @@ const NotesPage = () => {
       clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = null;
     }
-    
-    // Save current note first if there's one selected
+
+    // Save current note first if there's one selected and content has changed
     if (selectedNote && editorContent !== selectedNote.content) {
-      // Use the extracted save function
       saveNote(selectedNote, editorContent);
     }
-    
+
+    // Set the new selected note and update editor content
     setSelectedNote(note);
     setEditorContent(note.content);
   };
@@ -117,7 +99,6 @@ const NotesPage = () => {
     }
 
     try {
-      console.log('Creating new note with title:', newNoteTitle);
       const response = await notesAPI.createNote({
         title: newNoteTitle,
         content: ""
@@ -141,14 +122,14 @@ const NotesPage = () => {
       });
     } catch (error) {
       console.error("Error creating note:", error);
-      
+
       // Display more informative error message
       let errorMessage = "Failed to create note";
       let errorTitle = "Error";
-      
+
       if (error instanceof Error) {
         errorMessage = error.message;
-        
+
         // Handle specific error cases
         if (errorMessage.includes('user ID format')) {
           errorTitle = "Authentication Error";
@@ -159,7 +140,7 @@ const NotesPage = () => {
           errorMessage = "There was an issue with the note content. Please try again.";
         }
       }
-      
+
       toast({
         title: errorTitle,
         description: errorMessage,
@@ -170,11 +151,10 @@ const NotesPage = () => {
 
   const handleDeleteNote = async (noteId: string) => {
     try {
-      console.log('Deleting note with ID:', noteId);
       await notesAPI.deleteNote(noteId);
-      
+
       setNotes(notes.filter(note => note._id !== noteId));
-      
+
       if (selectedNote && selectedNote._id === noteId) {
         setSelectedNote(null);
         setEditorContent("");
@@ -186,14 +166,14 @@ const NotesPage = () => {
       });
     } catch (error) {
       console.error("Error deleting note:", error);
-      
+
       // Display more informative error message
       let errorMessage = "Failed to delete note";
       let errorTitle = "Error";
-      
+
       if (error instanceof Error) {
         errorMessage = error.message;
-        
+
         // Handle specific error types
         if (errorMessage.includes('Invalid note ID format')) {
           errorTitle = "Invalid Note ID";
@@ -201,17 +181,17 @@ const NotesPage = () => {
         } else if (errorMessage.includes('Note not found')) {
           errorTitle = "Note Not Found";
           errorMessage = "The note may have been already deleted.";
-          
+
           // Remove from state if not found on server
           setNotes(notes.filter(note => note._id !== noteId));
-          
+
           if (selectedNote && selectedNote._id === noteId) {
             setSelectedNote(null);
             setEditorContent("");
           }
         }
       }
-      
+
       toast({
         title: errorTitle,
         description: errorMessage,
@@ -222,13 +202,13 @@ const NotesPage = () => {
 
   const handleSaveNote = async () => {
     if (!selectedNote) return;
-    
+
     // Clear any pending auto-save timeout
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = null;
     }
-    
+
     // Use the extracted saveNote function
     await saveNote(selectedNote, editorContent);
   };
@@ -248,14 +228,13 @@ const NotesPage = () => {
 
   // Extracted save note logic for reuse
   const saveNote = async (note: Note, content: string) => {
-    if (!note) return;
-    
+    if (!note || !content) return;
+
     setIsSaving(true);
     try {
-      console.log('Auto-saving note with ID:', note._id);
       const noteData = {
         title: note.title,
-        content: content
+        content: content.trim() // Trim whitespace to prevent overlapping
       };
 
       const updatedNote = await notesAPI.updateNote(note._id, noteData);
@@ -268,24 +247,19 @@ const NotesPage = () => {
         };
 
         // Update the notes array with the updated note
-        setNotes(prevNotes => prevNotes.map(existingNote => 
+        setNotes(prevNotes => prevNotes.map(existingNote =>
           existingNote._id === note._id ? formattedNote : existingNote
         ));
-        
+
         // Update selected note if it's the currently edited one
         if (selectedNote && selectedNote._id === note._id) {
           setSelectedNote(formattedNote);
+          setEditorContent(formattedNote.content); // Sync editor content
         }
-
-        toast({
-          title: "Note saved",
-          description: "Your changes have been saved.",
-          variant: "default"
-        });
       }
     } catch (error) {
-      console.error("Error auto-saving note:", error);
-      
+      console.error("❌ Error saving note:", error);
+
       toast({
         title: "Save Error",
         description: error instanceof Error ? error.message : "Failed to save note",
@@ -298,11 +272,14 @@ const NotesPage = () => {
 
   // Handle editor content change with auto-save
   const handleEditorChange = (content: string) => {
-    setEditorContent(content);
-    
-    // Auto-save if we have a selected note
-    if (selectedNote) {
-      debounceSave(selectedNote, content);
+    // Only update if content is different to prevent unnecessary re-renders
+    if (content !== editorContent) {
+      setEditorContent(content);
+
+      // Auto-save if we have a selected note and content is not empty
+      if (selectedNote && content.trim().length > 0) {
+        debounceSave(selectedNote, content);
+      }
     }
   };
 
@@ -326,6 +303,14 @@ const NotesPage = () => {
       ['link', 'image'],
       ['clean'],
     ],
+    clipboard: {
+      matchVisual: false, // Prevent content overlapping
+    },
+    history: {
+      delay: 2000,
+      maxStack: 500,
+      userOnly: true
+    }
   }), []);
 
   const formats = useMemo(() => [
@@ -393,7 +378,7 @@ const NotesPage = () => {
                   </div>
                 </div>
               )}
-              
+
               {loading ? (
                 <div className="flex justify-center p-4">
                   Loading notes...
@@ -403,11 +388,10 @@ const NotesPage = () => {
                   {filteredNotes.map((note) => (
                     <div
                       key={note._id}
-                      className={`p-3 rounded-md cursor-pointer flex justify-between items-start transition-colors ${
-                        selectedNote?._id === note._id
-                          ? "bg-primary text-primary-foreground"
-                          : "hover:bg-muted"
-                      }`}
+                      className={`p-3 rounded-md cursor-pointer flex justify-between items-start transition-colors ${selectedNote?._id === note._id
+                        ? "bg-primary text-primary-foreground"
+                        : "hover:bg-muted"
+                        }`}
                       onClick={() => handleNoteSelect(note)}
                     >
                       <div className="flex-1 min-w-0">
@@ -422,11 +406,10 @@ const NotesPage = () => {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className={`ml-2 ${
-                          selectedNote?._id === note._id
-                            ? "hover:bg-primary-foreground/20 text-primary-foreground"
-                            : "hover:bg-muted-foreground/20"
-                        }`}
+                        className={`ml-2 ${selectedNote?._id === note._id
+                          ? "hover:bg-primary-foreground/20 text-primary-foreground"
+                          : "hover:bg-muted-foreground/20"
+                          }`}
                         onClick={(e) => {
                           e.stopPropagation();
                           handleDeleteNote(note._id);
@@ -464,7 +447,7 @@ const NotesPage = () => {
             <CardContent className="h-[calc(100vh-300px)] overflow-auto">
               {selectedNote ? (
                 <div className="h-full">
-                  <QuillEditor
+                  <CustomQuill
                     ref={quillRef}
                     theme="snow"
                     value={editorContent}
@@ -472,6 +455,8 @@ const NotesPage = () => {
                     modules={modules}
                     formats={formats}
                     className="h-[calc(100%-50px)]"
+                    placeholder="Start writing your note..."
+                    preserveWhitespace={true}
                   />
                 </div>
               ) : (

@@ -1,32 +1,33 @@
 import express from 'express';
 import Task from '../models/Task.js';
-import auth from '../middleware/auth.js';
-import mongoose from 'mongoose';
+import auth, { requireAuth, createUserScopedQuery, createUserScopedSelector, validateObjectId } from '../middleware/auth.js';
 
 const router = express.Router();
-
-// Helper to validate MongoDB ObjectId
-const isValidObjectId = (id) => {
-  return mongoose.Types.ObjectId.isValid(id);
-};
 
 // @route   GET /api/tasks
 // @desc    Get all tasks for current user
 // @access  Private
-router.get('/', auth, async (req, res) => {
+router.get('/', auth, requireAuth, async (req, res) => {
   try {
-    console.log('Fetching tasks for user:', req.userId);
+    // Create strictly user-scoped query - NEVER accept userId from client
+    const query = createUserScopedQuery(req);
     
-    if (!req.userId || !isValidObjectId(req.userId)) {
-      console.error('Invalid userId format:', req.userId);
-      return res.status(400).json({ message: 'Invalid user ID format' });
+    console.log(`🔍 GET /tasks: User ${req.user.email} (${req.userId})`);
+    
+    const tasks = await Task.find(query).sort({ createdAt: -1 });
+    
+    console.log(`📋 Found ${tasks.length} tasks for user ${req.userId}`);
+    
+    // Verify all returned tasks belong to the authenticated user (security check)
+    const invalidTasks = tasks.filter(task => task.userId.toString() !== req.userId);
+    if (invalidTasks.length > 0) {
+      console.error(`🚨 SECURITY BREACH: Found ${invalidTasks.length} tasks not belonging to user ${req.userId}`);
+      throw new Error('Data isolation breach detected');
     }
     
-    const tasks = await Task.find({ userId: req.userId }).sort({ createdAt: -1 });
-    console.log(`Found ${tasks.length} tasks`);
     res.json(tasks);
   } catch (error) {
-    console.error('Get tasks error:', error);
+    console.error(`❌ GET /tasks error for user ${req.userId}:`, error);
     res.status(500).json({ message: 'Server error', details: error.message });
   }
 });
@@ -34,29 +35,41 @@ router.get('/', auth, async (req, res) => {
 // @route   POST /api/tasks
 // @desc    Create a new task
 // @access  Private
-router.post('/', auth, async (req, res) => {
+router.post('/', auth, requireAuth, async (req, res) => {
   try {
+    // NEVER accept userId from client - always use authenticated user
     const { title, dueDate, status } = req.body;
     
-    console.log('Creating task:', { title, dueDate, status, userId: req.userId });
+    console.log(`📝 POST /tasks: User ${req.user.email} (${req.userId}) creating "${title}"`);
     
-    if (!req.userId || !isValidObjectId(req.userId)) {
-      console.error('Invalid userId format for task creation:', req.userId);
-      return res.status(400).json({ message: 'Invalid user ID format' });
+    // Validate required fields
+    if (!title || !dueDate) {
+      return res.status(400).json({ message: 'Title and due date are required' });
     }
-
-    const newTask = new Task({
-      userId: req.userId,
-      title,
-      dueDate,
+    
+    // Create task with ONLY authenticated user's ID
+    const taskData = {
+      userId: req.userId, // CRITICAL: Never accept this from client
+      title: title.trim(),
+      dueDate: new Date(dueDate),
       status: status || 'not-started'
-    });
-
-    const task = await newTask.save();
-    console.log('Task created with ID:', task._id);
+    };
+    
+    const task = new Task(taskData);
+    await task.save();
+    
+    console.log(`✅ Created task "${task.title}" (${task._id}) for user ${req.userId}`);
+    
+    // Security verification: Ensure the created task has the correct userId
+    if (task.userId.toString() !== req.userId) {
+      console.error(`🚨 SECURITY BREACH: Created task has wrong userId: ${task.userId} vs ${req.userId}`);
+      await Task.findByIdAndDelete(task._id); // Clean up the bad record
+      throw new Error('Task creation security breach');
+    }
+    
     res.status(201).json(task);
   } catch (error) {
-    console.error('Create task error:', error);
+    console.error(`❌ POST /tasks error for user ${req.userId}:`, error);
     res.status(500).json({ message: 'Server error', details: error.message });
   }
 });
@@ -115,9 +128,6 @@ router.put('/:id', auth, async (req, res) => {
     if (title !== undefined) taskFields.title = title;
     if (dueDate !== undefined) taskFields.dueDate = dueDate;
     if (status !== undefined) taskFields.status = status;
-    
-    // Update updatedAt
-    taskFields.updatedAt = Date.now();
 
     // Find task by id and check if user owns it
     let task = await Task.findOne({ _id: taskId, userId: req.userId });
@@ -127,9 +137,9 @@ router.put('/:id', auth, async (req, res) => {
       return res.status(404).json({ message: 'Task not found' });
     }
 
-    // Update task
-    task = await Task.findByIdAndUpdate(
-      taskId,
+    // Update task - ensure we filter by userId for security
+    task = await Task.findOneAndUpdate(
+      { _id: taskId, userId: req.userId },
       { $set: taskFields },
       { new: true }
     );

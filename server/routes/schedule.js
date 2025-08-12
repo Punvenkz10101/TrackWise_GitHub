@@ -127,9 +127,9 @@ router.put('/:id', auth, async (req, res) => {
       return res.status(404).json({ message: 'Reminder not found' });
     }
 
-    // Update reminder
-    reminder = await Reminder.findByIdAndUpdate(
-      reminderId,
+    // Update reminder - ensure we filter by userId for security
+    reminder = await Reminder.findOneAndUpdate(
+      { _id: reminderId, userId: req.userId },
       { $set: reminderFields },
       { new: true }
     );
