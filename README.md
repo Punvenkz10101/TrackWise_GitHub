@@ -177,17 +177,6 @@ ALLOWED_ORIGINS=https://yourdomain.com
 4. 📤 Push to the branch (`git push origin feature/amazing-feature`)
 5. 🔄 Open a Pull Request
 
-## 📞 Support
-
-- 🐛 **Issues**: Create an issue in the GitHub repository
-- 📖 **Docs**: Check `AUTH_README.md` for authentication details
-- 🔍 **Debug**: Review server logs for troubleshooting
-
-## 📝 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
----
 
 <div align="center">
 
