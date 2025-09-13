@@ -16,6 +16,6 @@
         }
     ],
     "env": {
-        "VITE_API_URL": "https://track-wise-server.vercel.app"
+        "VITE_API_URL": "https://server-awv4953zr-puneeths-projects-f34775d1.vercel.app"
     }
 }
