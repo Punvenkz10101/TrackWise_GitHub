@@ -15,7 +15,6 @@
             "dest": "/index.html"
         }
     ],
-    "ignoreCommand": "git diff --quiet HEAD^ HEAD .",
     "env": {
         "VITE_API_URL": "https://track-wise-server.vercel.app"
     }
